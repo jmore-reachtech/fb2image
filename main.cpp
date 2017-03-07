@@ -19,7 +19,7 @@
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);    
-    const char *filePath = 0;
+    const char *filePath = "";
     int width = -1;
     int height = -1;
     int lineLength = -1;
