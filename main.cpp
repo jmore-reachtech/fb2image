@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #define FRAMEBUFFER_DEVICE "/dev/fb0"
 
@@ -23,20 +24,15 @@ int main(int argc, char *argv[])
     int height = -1;
     int lineLength = -1;
 
-
     /* Options needed to run the application */
-    /* fb2image -f /application/images/screenshot.jpg -w 1280 -t 800 -l 5120 */
     while (1) {
         static struct option longOptions[] = {
             { "image-path",  required_argument, 0, 'f' },
-            { "width",       required_argument, 0, 'w' },
-            { "height",      required_argument, 0, 't' },
-            { "line-length", required_argument, 0, 'l' },
             { "help",        no_argument,       0, 'h' },
             { 0,            0, 0,  0  }
         };
 
-        int c = getopt_long(argc, argv, "f:w:t:l:h?", longOptions, 0);
+        int c = getopt_long(argc, argv, "f:h?", longOptions, 0);
 
         if (c == -1) {
             break;  // no more options to process
@@ -46,30 +42,20 @@ int main(int argc, char *argv[])
         case 'f':
             filePath = optarg;
             break;
-        case 't':
-            height = atoi(optarg);
-            break;
-        case 'l':
-            lineLength = atoi(optarg);
-            break;
-        case 'w':
-            width = atoi(optarg);
-            break;
         case '?':
         case 'h':
         default:
-            printf("Options required\n-f <image file path>\n-w <width in pixels>\n-t <height in pixels>\n-l <line length in bytes>\n");
+            printf("Options required\n-f <image file path>\n");
             return 0;
         }
 
     }
 
     /* Check required options */
-    if (strlen(filePath) == 0 || width == -1 || height == -1 || lineLength == -1) {
-        printf("Options required\n-f <image file path>\n-w <width in pixels>\n-t <height in pixels>\n-l <line length in bytes>\n");
+    if (strlen(filePath) == 0) {
+        printf("Options required\n-f <image file path>\n");
         return 0;
     }
-
 
     /* Check that the image file path is correct */
     QString path(filePath);
@@ -96,9 +82,41 @@ int main(int argc, char *argv[])
          }
     }
 
-    /* Open framebuffer to read */
-    QFile file(FRAMEBUFFER_DEVICE);
+    /* Open framebuffer to get screen info */
+    struct fb_var_screeninfo vscreeninfo;
+    struct fb_fix_screeninfo fscreeninfo;
+    int fbfd;
 
+    fbfd=open(FRAMEBUFFER_DEVICE, O_RDONLY);
+    if(fbfd==-1) {
+        printf("Could not open framebuffer");
+        return 0;
+    }
+
+    /* Fetch variable screen info */
+    int ioct=ioctl(fbfd, FBIOGET_VSCREENINFO, &vscreeninfo);
+    if(ioct==-1) {
+       printf("VSCREEN-IOCTL failed ioct");
+       return 0;
+    }
+
+    /* Fetch fixed screen info */
+    ioct=ioctl(fbfd,FBIOGET_FSCREENINFO,&fscreeninfo);
+    if(ioct==-1) {
+        printf("FSCREEN-IOCTL failed");
+        return 0;
+    }
+
+    close(ioct);
+    width = vscreeninfo.xres;
+    height = vscreeninfo.yres;
+    lineLength = fscreeninfo.line_length;
+    close(fbfd);
+
+    printf("Screen info found:\nWidth: %d\nHeight: %d\nLine Length: %d\n\n", width, height, lineLength);
+
+    /* Open framebuffer to read pixels */
+    QFile file(FRAMEBUFFER_DEVICE);
     if (!file.open(QIODevice::ReadOnly)) {
         printf("Could not open framebuffer device\n");
         return 0;
@@ -125,6 +143,7 @@ int main(int argc, char *argv[])
     }
 
 
+    /* save the image to disk */
     if (image.save(filePath, 0, 100))
         printf("Image saved: %s\n", filePath);
     else
